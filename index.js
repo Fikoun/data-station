@@ -1,4 +1,4 @@
-const socket = require("./socket");
+const Socket = require("./socket");
 const config = require('./config');
 
 // File create in dir name... :) (or filename?)
@@ -21,5 +21,10 @@ config.loadConfig([
         name: 'port',
         message: 'Port number',
         default: '1337'
+    },{
+        type: 'text',
+        name: 'token',
+        message: 'Token',
+        default: '000000'
     }
-]).then(() => socket.connect());
+]).then(() => new Socket());

@@ -5,79 +5,70 @@ const ora = require('ora');
 
 class SocketController {
 
+    constructor() {
+        this.connect();
+    }
+
     connect() {
         //console.log(`${config.get('host')}:${config.get('port')}`);
-        this.client = io(`${config.get('host')}:${config.get('port')}`); 
-
-        this.client.on("connect_error", (err) => {
-            console.log(`connect_error due to "${err.message}"`);
-        });
+        this.client = io(`${config.get('host')}:${config.get('port')}`, {
+            auth: {
+                token: config.get('token'),
+                reconnection: false
+            }
+        }); 
+        this.connecting = true;
+        if (this.connect_spinner)
+            this.connect_spinner.stop();
+        else
+            this.connect_spinner = ora(`Connecting to ${config.get('host')}:${config.get('port')} ...`).start();
         
         this.checkConnection();
     }
 
     checkConnection() {
-        const connect_spinner = ora(`Connecting to ${config.get('host')}:${config.get('port')} ...`).start();
-
         const timeout = 5000;
         const interval = 500;
-        let connecting = true;
+
+        this.client.on("connect_error", (err) => {
+            console.log(`\nconnect_error due to "${err.message}"`);
+            this.connecting = false;
+            this.connect_spinner.stop();
+            this.client.disconnect();
+            this.client.removeAllListeners();
+        });
 
         const loop = async (i) => {
-            if (!connecting) {
-                connect_spinner.stop();
+            if (!this.connecting || (i >= timeout / interval)) {
+                this.connect_spinner.stop();
                 console.log("\nTry correcting connection variables.");
                 
                 await config.ask('host')
                 await config.ask('port')
+                await config.ask('token')
 
-                connect_spinner.start(`Connecting to ${config.get('host')}:${config.get('port')}`)
-                connecting = true;
-                return loop(0);
-            }
-
-            if (!this.client.connected && i < timeout / interval)
+                return this.connect()
+            }else if (this.client.connected) {
+                this.connecting = false;
+                this.connect_spinner.succeed(`Connected as >${this.client.id}<`);
+            }else if (!this.client.connected && i < timeout / interval)
                 return setTimeout(() => loop(i+1), interval)
-            else if (this.client.connected) {
-                connecting = false;
-                connect_spinner.succeed(`Connected as >${this.client.id}<`);
-            }
-            else if (i >= timeout / interval) {
-                connect_spinner.fail(`Timeout: Unable to connect to ${config.get('host')}:${config.get('port')}`);
-                console.log();
-
-                setTimeout(() => {
-                    if (connecting) {
-                        process.openStdin().addListener("data", function (d) {
-                            connecting = false;
-                        });
-                        connect_spinner.start("Connecting ... press <enter>  to stop")
-                        loop(0);
-                    }
-                }, 2000);
-                return;
-            }
         };
 
         this.client.on("connect", (msg, err) => {
-            connect_spinner.succeed();
-            this.client.emit('settings', config.data);
+            this.connect_spinner.succeed();
+            console.log({msg});
+            //this.client.emit('settings', config.data);
         });
 
         this.client.on("disconnect", (msg, err) => {
-            connect_spinner.warn("Disconnected!");
-            setTimeout(() => {
-                connect_spinner.start("Reconnecting ...")
-                connecting = true;
-                loop(0);
-            }, 2000);
+            this.connect_spinner.warn("Disconnected!");
+            this.client.disconnect();
+            this.client.removeAllListeners();
+            return this.connect()
         });
 
-
-
         this.handleServer();
-
-        connecting = true;
         loop(0);
     }
 
@@ -96,4 +87,4 @@ class SocketController {
 
 }
 
-module.exports = new SocketController();
+module.exports = SocketController;
