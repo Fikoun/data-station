@@ -16,13 +16,13 @@ class SocketController {
                 token: config.get('token'),
                 reconnection: false
             }
-        }); 
+        });
         this.connecting = true;
         if (this.connect_spinner)
             this.connect_spinner.stop();
         else
             this.connect_spinner = ora(`Connecting to ${config.get('host')}:${config.get('port')} ...`).start();
-        
+
         this.checkConnection();
     }
 
@@ -42,22 +42,22 @@ class SocketController {
             if (!this.connecting || (i >= timeout / interval)) {
                 this.connect_spinner.stop();
                 console.log("\nTry correcting connection variables.");
-                
+
                 await config.ask('host')
                 await config.ask('port')
                 await config.ask('token')
 
                 return this.connect()
-            }else if (this.client.connected) {
+            } else if (this.client.connected) {
                 this.connecting = false;
-                this.connect_spinner.succeed(`Connected as >${this.client.id}<`);
-            }else if (!this.client.connected && i < timeout / interval)
-                return setTimeout(() => loop(i+1), interval)
+                this.connect_spinner.succeed(`Connected as ${this.client.id}`);
+            } else if (!this.client.connected && i < timeout / interval)
+                return setTimeout(() => loop(i + 1), interval)
         };
 
         this.client.on("connect", (msg, err) => {
             this.connect_spinner.succeed();
-            console.log({msg});
+            console.log({ msg });
             //this.client.emit('settings', config.data);
         });
 
@@ -74,13 +74,19 @@ class SocketController {
 
     handleServer() {
 
-        this.client.on('list', () => this.client.emit('message', DeviceController.list()));
+        //this.client.on('list', () => this.client.emit('message', DeviceController.list()));
 
-        this.client.on('listPorts', () => {
-            DeviceController.listSerial().then((list) => this.client.emit('ports', list))
+        this.client.on('list-ports', (callback) => {
+            console.log("list-ports EMIT");
+            DeviceController.listSerial().then((list) => {
+                console.log({list});
+                this.client.emit("list-ports", { list }, (response) => {
+                    console.log({ response });
+                });
+            })
         });
 
-        this.client.on('command', ({path, command}) => {
+        this.client.on('command', ({ path, command }) => {
             DeviceController.command(path, command, (data) => this.client.emit('data', data))
         });
     }
